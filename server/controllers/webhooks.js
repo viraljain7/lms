@@ -318,6 +318,55 @@ ${JSON.stringify(data.parsedBody, null, 2)}
 //     response.json({ received: true });
 // };
 
+const handlePaymentSuccess = async (payment) => {
+  try {
+    const purchaseId = payment.notes?.purchaseId;
+    if (!purchaseId) return;
+
+    const purchaseData = await Purchase.findById(purchaseId);
+    if (!purchaseData) return;
+
+    if (purchaseData.status === "completed") return;
+
+    const userData = await User.findById(purchaseData.userId);
+    const courseData = await Course.findById(purchaseData.courseId.toString());
+
+    if (!userData || !courseData) return;
+
+    if (!courseData.enrolledStudents.includes(userData._id)) {
+      courseData.enrolledStudents.push(userData._id);
+      await courseData.save();
+    }
+
+    if (!userData.enrolledCourses.includes(courseData._id)) {
+      userData.enrolledCourses.push(courseData._id);
+      await userData.save();
+    }
+
+    purchaseData.status = "completed";
+    purchaseData.paymentId = payment.id;
+    await purchaseData.save();
+  } catch (err) {
+    console.error("Razorpay payment success handling failed:", err);
+  }
+};
+
+const handlePaymentFailed = async (payment) => {
+  try {
+    const purchaseId = payment.notes?.purchaseId;
+    if (!purchaseId) return;
+
+    const purchaseData = await Purchase.findById(purchaseId);
+    if (!purchaseData) return;
+
+    purchaseData.status = "failed";
+    purchaseData.paymentId = payment.id;
+    await purchaseData.save();
+  } catch (err) {
+    console.error("Razorpay payment failed handling error:", err);
+  }
+};
+
 
 const razorpayInstance = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
