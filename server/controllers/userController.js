@@ -3,12 +3,13 @@ import Course from "../models/Course.js"
 import { Purchase } from "../models/Purchase.js"
 import User from "../models/User.js"
 import { CourseProgress } from "../models/CourseProgress.js"
+import Razorpay from "razorpay";
 
 export const getUserData = async (req, res) => {
   try {
     const userId = req.auth.userId;
     const user = await User.findById(userId);
-console.log(user)
+    // console.log(user,userId)
     if (!user) {
       return res.json({
         success: false,
@@ -48,7 +49,7 @@ export const userEnrolledCourses = async (req,res)=>{
 
 // Purchase course
 
-export const purchaseCourse = async (req,res) => {
+export const purchaseCourseStripe = async (req,res) => {
     try {
         const {courseId} = req.body
         const {origin} = req.headers
@@ -72,7 +73,7 @@ export const purchaseCourse = async (req,res) => {
 
         // stripe gateway initialize
         const stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY)
-        const currency = process.env.CURRENCY.toLowerCase();
+        const currency = "inr";
         
         // creating line items to for stripe
         const line_items = [{
@@ -104,6 +105,65 @@ export const purchaseCourse = async (req,res) => {
     }
 }
 
+
+const razorpayInstance = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
+
+
+export const purchaseCourseRazorpay = async (req, res) => {
+  try {
+    const { courseId } = req.body;
+    const { origin } = req.headers;
+    const userId = req.auth.userId;
+
+    const userData = await User.findById(userId);
+    const courseData = await Course.findById(courseId);
+
+    if (!userData || !courseData) {
+      return res.json({ success: false, message: "Data Not Found" });
+    }
+    // 💰 Amount calculation
+    const amount = (
+      courseData.coursePrice -
+      (courseData.discount * courseData.coursePrice) / 100
+    ).toFixed(2);
+
+    // 🧾 Create purchase
+    const newPurchase = await Purchase.create({
+      courseId: courseData._id,
+      userId,
+      amount,
+      status: "pending",
+    });
+
+    // 🟢 Create Razorpay Order
+    const order = await razorpayInstance.orders.create({
+      amount: Math.round(Number(amount) * 100), // paise
+      currency: "INR",
+      receipt: `receipt_${newPurchase._id}`,
+      notes: {
+        purchaseId: newPurchase._id.toString(),
+      },
+    });
+
+res.json({
+  success: true,
+  razorpaySession: {
+    orderId: order.id,
+    amount: order.amount,
+    currency: order.currency,
+    key: process.env.RAZORPAY_KEY_ID,
+    redirectUrl: `${origin}/loading/my-enrollments`,
+  },
+});
+
+
+  } catch (error) {
+    res.json({ success: false, message: error.message });
+  }
+};
 // Update user Course progress
 
 export const updateUserCourseProgress = async(req,res)=>{
