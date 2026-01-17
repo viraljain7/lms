@@ -56,6 +56,16 @@ app.get('/api/logs/razorpay', (req, res) => {
   res.setHeader('Content-Type', 'text/plain');
   res.send(fs.readFileSync(logPath, 'utf8'));
 });
+app.get('/api/logs/razorpay-payment', (req, res) => {
+  const logPath = path.join(process.cwd(), 'logs', 'razorpay-webhook.txt');
+
+  if (!fs.existsSync(logPath)) {
+    return res.status(404).send('Log file not found');
+  }
+
+  res.setHeader('Content-Type', 'text/plain');
+  res.send(fs.readFileSync(logPath, 'utf8'));
+});
 const PORT = process.env.PORT || 3000;
 
 if (process.env.NODE_ENV === 'production') {
