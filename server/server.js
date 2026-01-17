@@ -39,11 +39,23 @@ app.get('/', (req, res) => {
   res.send('Edemy API is working fine!');
 });
 
+
+
+
 app.post('/clerk', express.json(), clerkWebhooks);
 app.use('/api/educator', express.json(), educatorRouter);
 app.use('/api/course', express.json(), courseRouter);
 app.use('/api/user', express.json(), userRouter);
+app.get('/api/logs/razorpay', (req, res) => {
+  const logPath = path.join(process.cwd(), 'logs', 'razorpay-webhook.log.txt');
 
+  if (!fs.existsSync(logPath)) {
+    return res.status(404).send('Log file not found');
+  }
+
+  res.setHeader('Content-Type', 'text/plain');
+  res.send(fs.readFileSync(logPath, 'utf8'));
+});
 const PORT = process.env.PORT || 3000;
 
 if (process.env.NODE_ENV === 'production') {
