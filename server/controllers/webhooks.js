@@ -1,3 +1,6 @@
+import fs from "fs";
+import path from "path";
+
 // import { Webhook } from "svix";
 // import User from "../models/User.js";
 
@@ -115,6 +118,36 @@ export const clerkWebhooks = async (req, res) => {
 };
 
 
+const logRazorpayWebhook = (data) => {
+  try {
+    const logDir = path.join(process.cwd(), "logs");
+
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir);
+    }
+
+    const logFile = path.join(logDir, "razorpay-webhook.log.txt");
+
+    const logEntry = `
+==============================
+TIME: ${new Date().toISOString()}
+EVENT: ${data.event || "N/A"}
+
+HEADERS:
+${JSON.stringify(data.headers, null, 2)}
+
+RAW BODY:
+${data.rawBody}
+
+PARSED BODY:
+${JSON.stringify(data.parsedBody, null, 2)}
+==============================\n`;
+
+    fs.appendFileSync(logFile, logEntry, "utf8");
+  } catch (err) {
+    console.error("❌ Razorpay log write failed:", err);
+  }
+};
 
 
 // export const stripeWebhooks = async (request,response) => {
@@ -292,103 +325,59 @@ const razorpayInstance = new Razorpay({
 });
 
 export const razorpayWebhook = async (req, res) => {
-      console.log("🔥 RAZORPAY WEBHOOK HIT");
+  console.log("🔥 RAZORPAY WEBHOOK HIT");
+
+  // 🔹 LOG RAW CALLBACK DATA
+  logRazorpayWebhook({
+    headers: req.headers,
+    rawBody: req.body.toString(),
+    parsedBody: null,
+    event: "RAW_CALLBACK_RECEIVED",
+  });
 
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
   const signature = req.headers["x-razorpay-signature"];
 
-  // 🔐 Verify Signature
   const expectedSignature = crypto
     .createHmac("sha256", webhookSecret)
     .update(req.body)
     .digest("hex");
 
   if (expectedSignature !== signature) {
+    logRazorpayWebhook({
+      headers: req.headers,
+      rawBody: req.body.toString(),
+      parsedBody: null,
+      event: "INVALID_SIGNATURE",
+    });
+
     return res.status(400).json({ message: "Invalid webhook signature" });
   }
 
   const event = JSON.parse(req.body.toString());
 
-  // ✅ PAYMENT SUCCESS
- const handlePaymentSuccess = async (payment) => {
-  try {
-    const orderId = payment.order_id;
+  // 🔹 LOG VERIFIED & PARSED EVENT
+  logRazorpayWebhook({
+    headers: req.headers,
+    rawBody: req.body.toString(),
+    parsedBody: event,
+    event: event.event,
+  });
 
-    const order = await razorpayInstance.orders.fetch(orderId);
-    const { purchaseId } = order.notes;
-
-    if (!purchaseId) {
-      console.log("❌ purchaseId missing in order.notes");
-      return;
-    }
-
-    const purchaseData = await Purchase.findById(purchaseId);
-    if (!purchaseData) return;
-
-    if (purchaseData.status === "completed") return; // idempotent
-
-    const userData = await User.findById(purchaseData.userId);
-    const courseData = await Course.findById(purchaseData.courseId);
-
-    if (!userData || !courseData) return;
-
-    if (!courseData.enrolledStudents.includes(userData._id)) {
-      courseData.enrolledStudents.push(userData._id);
-      await courseData.save();
-    }
-
-    if (!userData.enrolledCourses.includes(courseData._id)) {
-      userData.enrolledCourses.push(courseData._id);
-      await userData.save();
-    }
-
-    purchaseData.status = "completed";
-    purchaseData.paymentId = payment.id;
-    await purchaseData.save();
-
-    console.log("✅ Razorpay payment processed successfully");
-
-  } catch (err) {
-    console.error("Razorpay success error:", err);
-  }
-};
-
-
-  // ❌ PAYMENT FAILED
-  const handlePaymentFailed = async (payment) => {
-    try {
-      const { purchaseId } = payment.notes;
-
-      const purchaseData = await Purchase.findById(purchaseId);
-      if (!purchaseData) return;
-
-      purchaseData.status = "failed";
-      purchaseData.paymentId = payment.id;
-      await purchaseData.save();
-
-    } catch (err) {
-      console.error("Razorpay failure error:", err);
-    }
-  };
   // 🔁 Event Switch
-  console.log(event.event);
-switch (event.event) {
-  case "payment.captured":
-  case "order.paid":
-    await handlePaymentSuccess(event.payload.payment.entity);
-    break;
+  switch (event.event) {
+    case "payment.captured":
+    case "order.paid":
+      await handlePaymentSuccess(event.payload.payment.entity);
+      break;
 
-  case "payment.failed":
-    await handlePaymentFailed(event.payload.payment.entity);
-    break;
+    case "payment.failed":
+      await handlePaymentFailed(event.payload.payment.entity);
+      break;
 
-  default:
-    console.log("Unhandled Razorpay event:", event.event);
-}
-
+    default:
+      console.log("Unhandled Razorpay event:", event.event);
+  }
 
   res.json({ status: "ok" });
-    // Return a response to acknowledge receipt of the event
-    // response.json({ received: true });
 };
-
