@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
-import crypto from "crypto";
+import CryptoJS from "crypto-js";
+import { Webhook } from "svix";
 
 import User from "../models/User.js";
 import Course from "../models/Course.js";
@@ -11,7 +12,7 @@ import { Purchase } from "../models/Purchase.js";
 const logDir = path.join(process.cwd(), "logs");
 if (!fs.existsSync(logDir)) fs.mkdirSync(logDir);
 
-const logFile = path.join(logDir, "razorpay-webhook.txt");
+const logFile = path.join(logDir, "webhooks.txt");
 
 const writeLog = (title, data) => {
   fs.appendFileSync(
@@ -38,7 +39,6 @@ const handlePaymentSuccess = async (payment) => {
       return;
     }
 
-    // Prevent double processing
     if (purchase.status === "completed") {
       writeLog("ALREADY_COMPLETED", purchase._id);
       return;
@@ -55,35 +55,28 @@ const handlePaymentSuccess = async (payment) => {
       return;
     }
 
-    /* ================= ENROLL USER ================= */
-
-    // Safe ObjectId comparison
-    if (
-      !user.enrolledCourses.some(
-        (id) => id.toString() === course._id.toString()
-      )
-    ) {
+    // Enroll user
+    if (!user.enrolledCourses.some(id => id.toString() === course._id.toString())) {
       user.enrolledCourses.push(course._id);
       await user.save();
     }
 
-    // Course enrolled students (string userId)
-    if (!course.enrolledStudents.includes(user._id)) {
+    if (!course.enrolledStudents.some(id => id.toString() === user._id.toString())) {
       course.enrolledStudents.push(user._id);
       await course.save();
     }
 
     purchase.status = "completed";
-    purchase.paymentId = payment.id;
+    purchase.paymentId = payment.id || payment.txnid;
     await purchase.save();
 
     writeLog("ENROLLMENT_SUCCESS", {
+      purchaseId: purchase._id,
       userId: user._id,
       courseId: course._id,
-      purchaseId: purchase._id,
     });
-  } catch (err) {
-    writeLog("PAYMENT_SUCCESS_ERROR", err.message);
+  } catch (error) {
+    writeLog("PAYMENT_SUCCESS_ERROR", error.message);
   }
 };
 
@@ -93,17 +86,17 @@ const handlePaymentFailed = async (payment) => {
   try {
     const purchase =
       payment.notes?.purchaseId &&
-      (await Purchase.findById(payment.notes.purchaseId));
+      await Purchase.findById(payment.notes.purchaseId);
 
     if (!purchase) return;
 
     purchase.status = "failed";
-    purchase.paymentId = payment.id;
+    purchase.paymentId = payment.id || payment.txnid;
     await purchase.save();
 
-    writeLog("PAYMENT_FAILED", purchase);
-  } catch (err) {
-    writeLog("PAYMENT_FAILED_ERROR", err.message);
+    writeLog("PAYMENT_FAILED", purchase._id);
+  } catch (error) {
+    writeLog("PAYMENT_FAILED_ERROR", error.message);
   }
 };
 
@@ -114,18 +107,20 @@ export const razorpayWebhook = async (req, res) => {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
     const signature = req.headers["x-razorpay-signature"];
 
-    const expectedSignature = crypto
-      .createHmac("sha256", secret)
-      .update(req.body) // RAW BODY BUFFER
-      .digest("hex");
+    // RAW BODY → STRING
+    const body = req.body.toString();
+
+    // HMAC SHA256 using crypto-js
+    const expectedSignature = CryptoJS.HmacSHA256(body, secret)
+      .toString(CryptoJS.enc.Hex);
 
     if (expectedSignature !== signature) {
-      writeLog("INVALID_SIGNATURE", req.body.toString());
+      writeLog("RAZORPAY_INVALID_SIGNATURE", body);
       return res.status(400).json({ success: false });
     }
 
-    const event = JSON.parse(req.body.toString());
-    writeLog("WEBHOOK_EVENT", event.event);
+    const event = JSON.parse(body);
+    writeLog("RAZORPAY_EVENT", event.event);
 
     switch (event.event) {
       case "payment.authorized":
@@ -139,62 +134,114 @@ export const razorpayWebhook = async (req, res) => {
         break;
 
       default:
-        writeLog("UNHANDLED_EVENT", event.event);
+        writeLog("RAZORPAY_UNHANDLED_EVENT", event.event);
     }
 
     res.json({ status: "ok" });
   } catch (error) {
-    writeLog("WEBHOOK_ERROR", error.message);
+    writeLog("RAZORPAY_WEBHOOK_ERROR", error.message);
     res.status(500).json({ success: false });
   }
 };
 
-export const clerkWebhooks = async (req, res) => {
-    try {
-        const whook = new Webhook(process.env.CLERK_WEBHOOK_SECRET);
-        const payload = JSON.stringify(req.body); // Use req.rawBody if available
+/* ================= PAYU WEBHOOK ================= */
 
-        await whook.verify(payload, {
-            "svix-id": req.headers["svix-id"],
-            "svix-timestamp": req.headers["svix-timestamp"],
-            "svix-signature": req.headers["svix-signature"]
-        });
+export const payuWebhook = async (req, res) => {
+  try {
+    const salt = process.env.PAYU_SALT;
+    const payuHash = req.body.hash;
 
-        const { data, type } = req.body;
-
-        switch (type) {
-            case 'user.created': {
-                const userData = {
-                    _id: data.id,
-                    email: data.email_addresses?.[0]?.email_address || "",
-                    name: (data.first_name || "") + " " + (data.last_name || ""),
-                    imageUrl: data.image_url || "",
-                };
-                await User.create(userData);
-                return res.json({});
-            }
-
-            case 'user.updated': {
-                const userData = {
-                    email: data.email_addresses?.[0]?.email_address || "",
-                    name: (data.first_name || "") + " " + (data.last_name || ""),
-                    imageUrl: data.image_url || "",
-                };
-                await User.findByIdAndUpdate(data.id, userData);
-                return res.json({});
-            }
-
-            case 'user.deleted': {
-                await User.findByIdAndDelete(data.id);
-                return res.json({});
-            }
-
-            default:
-                return res.status(400).json({ success: false, message: "Unhandled event type" });
-        }
-    } catch (error) {
-        return res.status(400).json({ success: false, message: error.message });
+    if (!payuHash) {
+      writeLog("PAYU_NO_HASH", req.body);
+      return res.status(400).json({ success: false });
     }
+
+    const {
+      status,
+      txnid,
+      amount,
+      productinfo,
+      firstname,
+      email,
+      key,
+      udf1, // purchaseId
+    } = req.body;
+
+    const hashString =
+      `${salt}|${status}|||||||||||${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
+
+    const expectedHash = CryptoJS.SHA512(hashString)
+      .toString(CryptoJS.enc.Hex);
+
+    if (expectedHash !== payuHash) {
+      writeLog("PAYU_INVALID_HASH", req.body);
+      return res.status(400).json({ success: false });
+    }
+
+    if (status === "success") {
+      await handlePaymentSuccess({
+        txnid,
+        notes: { purchaseId: udf1 },
+      });
+    } else {
+      await handlePaymentFailed({
+        txnid,
+        notes: { purchaseId: udf1 },
+      });
+    }
+
+    writeLog("PAYU_EVENT", status);
+    res.json({ status: "ok" });
+  } catch (error) {
+    writeLog("PAYU_WEBHOOK_ERROR", error.message);
+    res.status(500).json({ success: false });
+  }
 };
 
+/* ================= CLERK WEBHOOK ================= */
 
+export const clerkWebhooks = async (req, res) => {
+  try {
+    const whook = new Webhook(process.env.CLERK_WEBHOOK_SECRET);
+    const payload = JSON.stringify(req.body);
+
+    await whook.verify(payload, {
+      "svix-id": req.headers["svix-id"],
+      "svix-timestamp": req.headers["svix-timestamp"],
+      "svix-signature": req.headers["svix-signature"],
+    });
+
+    const { data, type } = req.body;
+
+    switch (type) {
+      case "user.created":
+        await User.create({
+          _id: data.id,
+          email: data.email_addresses?.[0]?.email_address || "",
+          name: `${data.first_name || ""} ${data.last_name || ""}`,
+          imageUrl: data.image_url || "",
+        });
+        break;
+
+      case "user.updated":
+        await User.findByIdAndUpdate(data.id, {
+          email: data.email_addresses?.[0]?.email_address || "",
+          name: `${data.first_name || ""} ${data.last_name || ""}`,
+          imageUrl: data.image_url || "",
+        });
+        break;
+
+      case "user.deleted":
+        await User.findByIdAndDelete(data.id);
+        break;
+
+      default:
+        writeLog("CLERK_UNHANDLED_EVENT", type);
+    }
+
+    res.json({});
+  } catch (error) {
+    writeLog("CLERK_WEBHOOK_ERROR", error.message);
+    res.status(400).json({ success: false });
+  }
+};

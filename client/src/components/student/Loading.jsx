@@ -1,34 +1,33 @@
-import React, { useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import React, { useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 
 const Loading = () => {
-
-  const {path} = useParams()
-
+  const { path } = useParams();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (path) {
-      const timer = setTimeout(() => {
-        navigate(`/${path}`);
-      }, 5000);
+    if (!path) return;
 
-      return () => clearTimeout(timer);
-    }
-  }, []);
-  // }, [path, navigate]);
+    const timer = setTimeout(() => {
+      navigate(`/${path}`);
+      // console.log(path)
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [path, navigate]);
 
   return (
-    <div className='min-h-[10vh] flex items-center justify-center'>
-      {/* <div className='w-16 sm:w-20 aspect-square border-4 border-gray-400 border-t-4 border-t-blue-400 rounded-full animate-spin '></div> */}
-      <div className="flex space-x-2">
-          <div className="w-4 h-4 bg-blue-500 rounded-full animate-ping animation-delay-400"></div>
-           <div className="w-4 h-4 bg-green-500 rounded-full animate-ping animation-delay-400"></div>
-           <div className="w-4 h-4 bg-yellow-500 rounded-full animate-ping animation-delay-400"></div>
-           {/* <div className="w-4 h-4 bg-red-600 rounded-full animate-ping animation-delay-400"></div> */}
-         </div>
+    <div className="min-h-[40vh] flex flex-col items-center justify-center">
+      <div className="flex space-x-3 mb-4">
+        <div className="w-4 h-4 bg-blue-500 rounded-full animate-ping"></div>
+        <div className="w-4 h-4 bg-green-500 rounded-full animate-ping animation-delay-200"></div>
+        <div className="w-4 h-4 bg-yellow-500 rounded-full animate-ping animation-delay-400"></div>
+      </div>
+      <p className="text-gray-600 font-medium">
+        Processing payment, please wait...
+      </p>
     </div>
-  )
-}
+  );
+};
 
-export default Loading
+export default Loading;

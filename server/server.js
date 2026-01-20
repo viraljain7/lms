@@ -8,7 +8,7 @@ import fs from 'fs';
 import connectDB from './configs/mongodb.js';
 import connectCloudinay from './configs/cloudinary.js';
 
-import { clerkWebhooks, razorpayWebhook } from './controllers/webhooks.js';
+import { clerkWebhooks, payuWebhook, razorpayWebhook } from './controllers/webhooks.js';
 import educatorRouter from './routes/educatorRoutes.js';
 import courseRouter from './routes/courseRoute.js';
 import userRouter from './routes/userRoutes.js';
@@ -31,6 +31,11 @@ app.post(
   '/api/webhooks/razorpay',
   express.raw({ type: 'application/json' }),
   razorpayWebhook
+);
+app.post(
+  '/api/webhooks/payu',
+  express.raw({ type: 'application/json' }),
+  payuWebhook
 );
 
 app.use(clerkMiddleware());
