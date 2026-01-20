@@ -211,7 +211,7 @@ export const purchaseCoursePayu = async (req, res) => {
         phone: user.phone || "9999999999",
         udf1: purchase._id.toString(),
         surl: `${origin}/loading/my-enrollments`,
-        furl: `${origin}/payment-failed`,
+        furl: `${origin}/course-list`,
         hash,
         action: "https://secure.payu.in/_payment",
       },
