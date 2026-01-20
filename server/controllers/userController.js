@@ -179,22 +179,38 @@ export const purchaseCoursePayu = async (req, res) => {
 
     // ✅ CORRECT PAYU LIVE HASH (EXACT FORMAT)
     const hashString =
-      key + "|" +
-      txnid + "|" +
-      amount + "|" +
-      productinfo + "|" +
-      firstname + "|" +
-      email + "|" +
-      purchase._id + "|" + // udf1
-      "" + "|" +           // udf2
-      "" + "|" +           // udf3
-      "" + "|" +           // udf4
-      "" + "|" +           // udf5
-      "" + "|" +           // udf6
-      "" + "|" +           // udf7
-      "" + "|" +           // udf8
-      "" + "|" +           // udf9
-      "" + "|" +           // udf10
+      key +
+      "|" +
+      txnid +
+      "|" +
+      amount +
+      "|" +
+      productinfo +
+      "|" +
+      firstname +
+      "|" +
+      email +
+      "|" +
+      purchase._id +
+      "|" + // udf1
+      "" +
+      "|" + // udf2
+      "" +
+      "|" + // udf3
+      "" +
+      "|" + // udf4
+      "" +
+      "|" + // udf5
+      "" +
+      "|" + // udf6
+      "" +
+      "|" + // udf7
+      "" +
+      "|" + // udf8
+      "" +
+      "|" + // udf9
+      "" +
+      "|" + // udf10
       salt;
 
     const hash = CryptoJS.SHA512(hashString).toString(CryptoJS.enc.Hex);
@@ -210,8 +226,8 @@ export const purchaseCoursePayu = async (req, res) => {
         email,
         phone: user.phone || "9999999999",
         udf1: purchase._id.toString(),
-        surl: `${origin}/loading/my-enrollments`,
-        furl: `${origin}/course-list`,
+        surl: `${process.env.BACKEND_URL}/api/payu/success`,
+        furl: `${process.env.BACKEND_URL}/api/payu/failure`,
         hash,
         action: "https://secure.payu.in/_payment",
       },
@@ -220,7 +236,6 @@ export const purchaseCoursePayu = async (req, res) => {
     res.json({ success: false, message: error.message });
   }
 };
-
 
 /* ================= COURSE PROGRESS ================= */
 
@@ -280,7 +295,7 @@ export const addUserRating = async (req, res) => {
       return res.json({ success: false, message: "Course not purchased" });
     }
 
-    const index = course.courseRatings.findIndex(r => r.userId === userId);
+    const index = course.courseRatings.findIndex((r) => r.userId === userId);
     if (index > -1) {
       course.courseRatings[index].rating = rating;
     } else {

@@ -12,6 +12,7 @@ import { clerkWebhooks, payuWebhook, razorpayWebhook } from './controllers/webho
 import educatorRouter from './routes/educatorRoutes.js';
 import courseRouter from './routes/courseRoute.js';
 import userRouter from './routes/userRoutes.js';
+import payuRoutes from "./routes/payuRoutes.js";
 
 import { clerkMiddleware } from '@clerk/express';
 
@@ -22,6 +23,9 @@ await connectDB();
 await connectCloudinay();
 
 app.use(cors());
+
+
+app.use("/api/payu", payuRoutes);
 
 app.get('/api/webhooks/razorpay', (req, res) => {
   res.status(200).send('Razorpay webhook endpoint is live');
