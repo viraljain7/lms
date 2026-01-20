@@ -1,37 +1,40 @@
 import CryptoJS from "crypto-js";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 
 import { Purchase } from "../models/Purchase.js";
 import User from "../models/User.js";
 
-/* --------- ROOT PATH SETUP --------- */
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+/* ================= PAYU LOGGING ================= */
 
-// root folder (one level up from controllers)
-const ROOT_DIR = path.join(__dirname, "..", "..");
-const LOG_FILE = path.join(ROOT_DIR, "payu-callback-log.txt");
+// logs folder at project root
+const logDir = path.join(process.cwd(), "logs");
 
-/* --------- LOG FUNCTION --------- */
+// ensure logs folder exists
+if (!fs.existsSync(logDir)) {
+  fs.mkdirSync(logDir);
+}
+
+// PayU log file
+const LOG_FILE = path.join(logDir, "payu-callback-log.txt");
+
+// log helper
 const logPayUData = (title, data) => {
-  const log = `
-==============================
-${title}
+  fs.appendFileSync(
+    LOG_FILE,
+    `\n\n===== ${title} =====
 Time: ${new Date().toISOString()}
-------------------------------
 ${JSON.stringify(data, null, 2)}
-==============================
-
-`;
-  fs.appendFileSync(LOG_FILE, log, { encoding: "utf8" });
+`,
+    "utf8"
+  );
 };
 
-/* --------- SUCCESS CALLBACK --------- */
+/* ================= PAYU SUCCESS ================= */
+
 export const payuSuccess = async (req, res) => {
   try {
-    // 🔹 Log raw PayU data immediately
+    // 🔹 log full PayU response
     logPayUData("PAYU SUCCESS CALLBACK", req.body);
 
     const {
@@ -42,13 +45,13 @@ export const payuSuccess = async (req, res) => {
       firstname,
       email,
       hash,
-      udf1,
+      udf1, // purchaseId
     } = req.body;
 
     const salt = process.env.PAYU_SALT;
     const key = process.env.PAYU_KEY;
 
-    // 🔐 Hash verification
+    /* 🔐 PayU response hash verification */
     const hashString =
       salt +
       "|" +
@@ -81,17 +84,21 @@ export const payuSuccess = async (req, res) => {
       );
     }
 
+    /* 🔎 Find purchase */
     const purchase = await Purchase.findById(udf1);
     if (!purchase) {
       logPayUData("PURCHASE NOT FOUND", { udf1 });
+
       return res.redirect(
         `${process.env.FRONTEND_URL}/payment-failed`
       );
     }
 
+    /* ✅ Update purchase */
     purchase.status = "success";
     await purchase.save();
 
+    /* ✅ Enroll user */
     const user = await User.findById(purchase.userId);
     if (!user.enrolledCourses.includes(purchase.courseId)) {
       user.enrolledCourses.push(purchase.courseId);
@@ -121,9 +128,10 @@ export const payuSuccess = async (req, res) => {
   }
 };
 
-/* --------- FAILURE CALLBACK --------- */
+/* ================= PAYU FAILURE ================= */
+
 export const payuFailure = (req, res) => {
-  // 🔴 Log failure data
+  // 🔴 log failure response
   logPayUData("PAYU FAILURE CALLBACK", req.body);
 
   return res.redirect(

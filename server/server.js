@@ -57,7 +57,7 @@ app.use('/api/course', express.json(), courseRouter);
 app.use('/api/user', express.json(), userRouter);
 
 app.get("/api/logs/payu", (req, res) => {
-  const logPath = path.join(process.cwd(), "payu-callback-log.txt");
+  const logPath = path.join(process.cwd(), 'logs', "payu-callback-log.txt");
 
   if (!fs.existsSync(logPath)) {
     return res.status(404).send("PayU log file not found");
