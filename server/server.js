@@ -36,11 +36,9 @@ app.post(
   express.raw({ type: 'application/json' }),
   razorpayWebhook
 );
-app.post(
-  '/api/webhooks/payu',
-  express.raw({ type: 'application/json' }),
-  payuWebhook
-);
+// With this
+app.use(express.urlencoded({ extended: true })); // add this near the top
+app.post('/api/webhooks/payu', payuWebhook);
 
 app.use(clerkMiddleware());
 
