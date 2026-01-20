@@ -55,6 +55,18 @@ app.post('/clerk', express.json(), clerkWebhooks);
 app.use('/api/educator', express.json(), educatorRouter);
 app.use('/api/course', express.json(), courseRouter);
 app.use('/api/user', express.json(), userRouter);
+
+app.get("/api/logs/payu", (req, res) => {
+  const logPath = path.join(process.cwd(), "payu-callback-log.txt");
+
+  if (!fs.existsSync(logPath)) {
+    return res.status(404).send("PayU log file not found");
+  }
+
+  res.setHeader("Content-Type", "text/plain");
+  res.send(fs.readFileSync(logPath, "utf8"));
+});
+
 app.get('/api/logs/razorpay', (req, res) => {
   const logPath = path.join(process.cwd(), 'logs', 'razorpay-webhook.log.txt');
 
