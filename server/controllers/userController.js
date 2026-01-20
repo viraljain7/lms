@@ -143,6 +143,7 @@ export const purchaseCourseRazorpay = async (req, res) => {
 };
 
 /* ================= PAYU ================= */
+// ================= PAYU =================
 
 export const purchaseCoursePayu = async (req, res) => {
   try {
@@ -178,9 +179,10 @@ export const purchaseCoursePayu = async (req, res) => {
     const firstname = user.name || "User";
     const email = user.email;
 
-    // ✅ crypto-js SHA512 (FIXED)
+    // ✅ CORRECT HASH STRING (DO NOT CHANGE ORDER)
     const hashString =
-      `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|${purchase._id}|||||||||${salt}`;
+      `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|` +
+      `${purchase._id}||||||${salt}`;
 
     const hash = CryptoJS.SHA512(hashString).toString(CryptoJS.enc.Hex);
 
@@ -193,18 +195,19 @@ export const purchaseCoursePayu = async (req, res) => {
         productinfo,
         firstname,
         email,
-        phone: user.phone,
-        udf1: purchase._id.toString(), // purchaseId
+        phone: user.phone || "9999999999",
+        udf1: purchase._id.toString(),
         surl: `${origin}/loading/my-enrollments`,
         furl: `${origin}/payment-failed`,
         hash,
-        action: process.env.PAYU_BASE_URL,
+        action: "https://secure.payu.in/_payment", // LIVE
       },
     });
   } catch (error) {
     res.json({ success: false, message: error.message });
   }
 };
+
 
 /* ================= COURSE PROGRESS ================= */
 
