@@ -143,8 +143,6 @@ export const purchaseCourseRazorpay = async (req, res) => {
 };
 
 /* ================= PAYU ================= */
-// ================= PAYU =================
-
 export const purchaseCoursePayu = async (req, res) => {
   try {
     const { courseId } = req.body;
@@ -179,10 +177,25 @@ export const purchaseCoursePayu = async (req, res) => {
     const firstname = user.name || "User";
     const email = user.email;
 
-    // ✅ CORRECT HASH STRING (DO NOT CHANGE ORDER)
+    // ✅ CORRECT PAYU LIVE HASH (EXACT FORMAT)
     const hashString =
-      `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|` +
-      `${purchase._id}||||||${salt}`;
+      key + "|" +
+      txnid + "|" +
+      amount + "|" +
+      productinfo + "|" +
+      firstname + "|" +
+      email + "|" +
+      purchase._id + "|" + // udf1
+      "" + "|" +           // udf2
+      "" + "|" +           // udf3
+      "" + "|" +           // udf4
+      "" + "|" +           // udf5
+      "" + "|" +           // udf6
+      "" + "|" +           // udf7
+      "" + "|" +           // udf8
+      "" + "|" +           // udf9
+      "" + "|" +           // udf10
+      salt;
 
     const hash = CryptoJS.SHA512(hashString).toString(CryptoJS.enc.Hex);
 
@@ -200,7 +213,7 @@ export const purchaseCoursePayu = async (req, res) => {
         surl: `${origin}/loading/my-enrollments`,
         furl: `${origin}/payment-failed`,
         hash,
-        action: "https://secure.payu.in/_payment", // LIVE
+        action: "https://secure.payu.in/_payment",
       },
     });
   } catch (error) {
